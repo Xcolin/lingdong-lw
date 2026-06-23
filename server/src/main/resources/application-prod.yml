@@ -1,0 +1,16 @@
+server:
+  port: ${SERVER_PORT:10002}
+  servlet:
+    context-path: /lingdong-lw-server
+
+spring:
+  application:
+    name: lingdong-lw-server
+  datasource:
+    url: ${PAYROLL_DB_URL:jdbc:mysql://127.0.0.1:3306/lingdong_payroll?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
+    username: ${PAYROLL_DB_USERNAME:payroll_user}
+    password: ${PAYROLL_DB_PASSWORD:}
+
+payroll:
+  jwt-secret: ${PAYROLL_JWT_SECRET}
+  export-dir: ${PAYROLL_EXPORT_DIR:/home/apps/lingdong-lw-server/exports}

@@ -1,0 +1,21 @@
+[Unit]
+Description=Lingdong LW Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/apps/lingdong-lw-server
+Environment="SPRING_PROFILES_ACTIVE=prod"
+Environment="SERVER_PORT=10002"
+Environment="PAYROLL_DB_URL=jdbc:mysql://127.0.0.1:3306/lingdong_payroll?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai"
+Environment="PAYROLL_DB_USERNAME=payroll_user"
+Environment="PAYROLL_DB_PASSWORD=CHANGE_ME"
+Environment="PAYROLL_JWT_SECRET=CHANGE_ME_TO_A_LONG_RANDOM_SECRET"
+Environment="PAYROLL_EXPORT_DIR=/home/apps/lingdong-lw-server/exports"
+ExecStart=/usr/bin/java -jar /home/apps/lingdong-lw-server/payroll-server.jar
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
