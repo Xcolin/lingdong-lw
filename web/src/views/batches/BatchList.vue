@@ -107,7 +107,7 @@ onMounted(load)
           <template #default="{ row }">
             <el-button v-if="auth.hasPermission('batch:update')" :icon="Edit" link type="primary" @click="router.push(`/batches/${row.id}`)" />
             <el-button v-if="auth.hasPermission('batch:update') && !row.actualPaid" :icon="Check" link type="success" @click="markPaid(row)">实际已发</el-button>
-            <el-button v-if="auth.hasPermission('batch:delete')" :icon="Delete" link type="danger" @click="remove(row)" />
+            <el-button v-if="auth.hasPermission('batch:delete') && !row.actualPaid" :icon="Delete" link type="danger" @click="remove(row)" />
           </template>
         </el-table-column>
       </el-table>

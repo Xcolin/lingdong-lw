@@ -55,16 +55,16 @@ public class PayrollExportService {
     }
 
     @Transactional
-    public ExportRecord export(Long batchId, Long payingUnitId, BankTemplateType templateType, CurrentUser currentUser) {
+    public ExportRecord export(Long batchId, Long payingUnitId, BankTemplateType templateType, String savePath, CurrentUser currentUser) {
         PayrollBatch batch = batchService.getVisible(batchId, currentUser);
         PayingUnit unit = unitService.getVisible(payingUnitId, currentUser);
         List<PayrollBatchItem> items = batchService.listItems(batchId, currentUser);
         validate(items, templateType);
         try {
-            Files.createDirectories(exportDir);
-            String fileName = batch.getBatchName() + "-" + unit.getAccountName() + "-" + templateType.displayName() + "-" +
-                    LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss")) + templateType.extension();
-            Path target = exportDir.resolve(fileName);
+            Path outputDir = resolveOutputDir(savePath);
+            Files.createDirectories(outputDir);
+            String fileName = buildFileName(batch.getBatchName(), templateType);
+            Path target = outputDir.resolve(fileName);
             writeWorkbook(templateType, items, target);
             ExportRecord record = new ExportRecord();
             record.setBatchId(batchId);
@@ -81,6 +81,10 @@ public class PayrollExportService {
         } catch (IOException exception) {
             throw new BusinessException("导出文件失败：" + exception.getMessage());
         }
+    }
+
+    public ExportRecord export(Long batchId, Long payingUnitId, BankTemplateType templateType, CurrentUser currentUser) {
+        return export(batchId, payingUnitId, templateType, null, currentUser);
     }
 
     public Page<ExportRecord> list(long page, long size, DataScope scope) {
@@ -161,6 +165,24 @@ public class PayrollExportService {
                 throw new BusinessException("第 " + item.getRowNo() + " 行金额必须大于 0");
             }
         }
+    }
+
+    private Path resolveOutputDir(String savePath) {
+        if (savePath == null || savePath.isBlank()) {
+            return exportDir;
+        }
+        return Path.of(savePath.trim());
+    }
+
+    private String buildFileName(String batchName, BankTemplateType templateType) {
+        String safeBatchName = safeFileName(batchName);
+        String serial = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS"));
+        return safeBatchName + "-" + serial + templateType.extension();
+    }
+
+    private String safeFileName(String value) {
+        String safe = value == null ? "工资批次" : value.trim().replaceAll("[\\\\/:*?\"<>|]", "_");
+        return safe.isBlank() ? "工资批次" : safe;
     }
 
     private boolean isBank(PayrollBatchItem item, String bankName) {

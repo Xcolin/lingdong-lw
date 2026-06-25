@@ -55,6 +55,9 @@ public class PayrollBatchService {
     public PayrollBatch save(Long id, PayrollBatchSaveRequest request, CurrentUser currentUser) {
         boolean creating = id == null;
         PayrollBatch batch = creating ? new PayrollBatch() : getVisible(id, currentUser);
+        if (!creating) {
+            ensureMutable(batch);
+        }
         PayrollBatch before = creating ? null : copy(batch);
         batch.setBatchName(request.batchName());
         batch.setPayDate(request.payDate());
@@ -156,10 +159,17 @@ public class PayrollBatchService {
     @Transactional
     public void delete(Long id, CurrentUser currentUser) {
         PayrollBatch batch = getVisible(id, currentUser);
+        ensureMutable(batch);
         PayrollBatch before = copy(batch);
         batch.setDeleted(true);
         batchMapper.updateById(batch);
         operationLogService.record(currentUser, "DELETE", "PAYROLL_BATCH", id, before, batch);
+    }
+
+    private void ensureMutable(PayrollBatch batch) {
+        if (Boolean.TRUE.equals(batch.getActualPaid())) {
+            throw new BusinessException("工资批次已确认实际已发，不能修改或删除");
+        }
     }
 
     private PayrollBatchItem toItem(Long batchId, String targetType, Long personId, Long unitId, int rowNo, PayrollBatchItemRequest request) {

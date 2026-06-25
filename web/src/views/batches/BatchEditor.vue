@@ -28,12 +28,13 @@ const form = reactive<PayrollBatch>({
   remark: '',
   items: []
 })
-const exportForm = reactive<{ payingUnitId?: number; templateType: 'CCB' | 'BOC' }>({ templateType: 'CCB' })
+const exportForm = reactive<{ payingUnitId?: number; templateType: 'CCB' | 'BOC'; savePath?: string }>({ templateType: 'CCB', savePath: '' })
 
 const totalItems = computed(() => form.items?.length || 0)
 const totalAmount = computed(() => (form.items || []).reduce((sum, item) => sum + Number(item.amount || 0), 0))
 const missingBank = computed(() => (form.items || []).filter((item) => !item.bankAccount || !item.accountName).length)
 const missingBankName = computed(() => (form.items || []).filter((item) => !item.bankName).length)
+const readonlyBatch = computed(() => Boolean(form.actualPaid))
 const existingIdCards = computed(() => (form.items || []).filter((item) => item.targetType !== 'UNIT').map((item) => item.idCardNo).filter(Boolean))
 const existingUnitAccounts = computed(() => (form.items || []).filter((item) => item.targetType === 'UNIT').map((item) => item.bankAccount).filter(Boolean))
 const manualAccountNameRows = new WeakSet<BatchItem>()
@@ -174,6 +175,10 @@ function validateBatch() {
 }
 
 async function save() {
+  if (readonlyBatch.value) {
+    ElMessage.warning('该批次已确认实际已发，不能修改')
+    return false
+  }
   if (!validateBatch()) {
     return false
   }
@@ -191,8 +196,10 @@ async function save() {
 }
 
 async function openExport() {
-  const saved = await save()
-  if (!saved) return
+  if (!readonlyBatch.value) {
+    const saved = await save()
+    if (!saved) return
+  }
   const data: any = await listUnits({ page: 1, size: 200 })
   units.value = data.records || []
   exportVisible.value = true
@@ -212,7 +219,12 @@ async function submitExport() {
     ElMessage.warning('请选择银行模板')
     return
   }
-  const data: any = await createExport({ batchId: currentBatchId, payingUnitId: exportForm.payingUnitId, templateType: exportForm.templateType })
+  const data: any = await createExport({
+    batchId: currentBatchId,
+    payingUnitId: exportForm.payingUnitId,
+    templateType: exportForm.templateType,
+    savePath: exportForm.savePath?.trim() || undefined
+  })
   ElMessage.success(`导出成功：${data.fileName}`)
   exportVisible.value = false
 }
@@ -226,7 +238,7 @@ onMounted(load)
       <h1>{{ batchId ? '编辑工资批次' : '新建工资批次' }}</h1>
       <div>
         <el-button @click="router.push('/batches')">返回</el-button>
-        <el-button v-if="auth.hasPermission(batchId ? 'batch:update' : 'batch:create')" type="primary" :icon="Select" @click="save">保存</el-button>
+        <el-button v-if="!readonlyBatch && auth.hasPermission(batchId ? 'batch:update' : 'batch:create')" type="primary" :icon="Select" @click="save">保存</el-button>
         <el-button v-if="auth.hasPermission('batch:export')" type="success" :icon="Download" @click="openExport">导出</el-button>
       </div>
     </div>
@@ -241,14 +253,14 @@ onMounted(load)
     <div class="panel panel-fill">
       <el-form :model="form" label-width="84px" class="batch-form">
         <el-row :gutter="12">
-          <el-col :span="8"><el-form-item label="批次名称" required><el-input v-model="form.batchName" /></el-form-item></el-col>
-          <el-col :span="5"><el-form-item label="发放日期"><el-date-picker v-model="form.payDate" format="YYYY-MM-DD 00:00:00" value-format="YYYY-MM-DD" style="width: 100%" /></el-form-item></el-col>
-          <el-col :span="5"><el-form-item label="默认摘要"><el-select v-model="form.defaultSummary"><el-option label="工资" value="工资" /><el-option label="奖金" value="奖金" /><el-option label="报销" value="报销" /><el-option label="劳务费" value="劳务费" /></el-select></el-form-item></el-col>
-          <el-col :span="6"><el-form-item label="备注"><el-input v-model="form.remark" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="批次名称" required><el-input v-model="form.batchName" :disabled="readonlyBatch" /></el-form-item></el-col>
+          <el-col :span="5"><el-form-item label="发放日期"><el-date-picker v-model="form.payDate" :disabled="readonlyBatch" format="YYYY-MM-DD 00:00:00" value-format="YYYY-MM-DD" style="width: 100%" /></el-form-item></el-col>
+          <el-col :span="5"><el-form-item label="默认摘要"><el-select v-model="form.defaultSummary" :disabled="readonlyBatch"><el-option label="工资" value="工资" /><el-option label="奖金" value="奖金" /><el-option label="报销" value="报销" /><el-option label="劳务费" value="劳务费" /></el-select></el-form-item></el-col>
+          <el-col :span="6"><el-form-item label="备注"><el-input v-model="form.remark" :disabled="readonlyBatch" /></el-form-item></el-col>
         </el-row>
       </el-form>
 
-      <div class="toolbar">
+      <div v-if="!readonlyBatch" class="toolbar">
         <div>
           <el-button type="primary" :icon="UserFilled" @click="pickerVisible = true">批量选人员</el-button>
           <el-button type="primary" :icon="OfficeBuilding" @click="unitPickerVisible = true">批量选单位</el-button>
@@ -261,7 +273,7 @@ onMounted(load)
         <el-table-column label="序号" type="index" width="70" fixed align="center" />
         <el-table-column label="类型" width="92" fixed>
           <template #default="{ row }">
-            <el-select v-model="row.targetType" style="width: 74px">
+            <el-select v-model="row.targetType" :disabled="readonlyBatch" style="width: 74px">
               <el-option label="人员" value="PERSON" />
               <el-option label="单位" value="UNIT" />
             </el-select>
@@ -269,40 +281,40 @@ onMounted(load)
         </el-table-column>
         <el-table-column width="140" fixed>
           <template #header><span class="required-label">收款对象</span></template>
-          <template #default="{ row }"><el-input v-model="row.name" @focus="rememberName(row)" @input="syncAccountName(row, $event)" /></template>
+          <template #default="{ row }"><el-input v-model="row.name" :disabled="readonlyBatch" @focus="rememberName(row)" @input="syncAccountName(row, $event)" /></template>
         </el-table-column>
         <el-table-column width="190">
           <template #header><span class="required-label">银行账号</span></template>
-          <template #default="{ row }"><el-input v-model="row.bankAccount" /></template>
+          <template #default="{ row }"><el-input v-model="row.bankAccount" :disabled="readonlyBatch" /></template>
         </el-table-column>
         <el-table-column width="130">
           <template #header><span class="required-label">户名</span></template>
-          <template #default="{ row }"><el-input v-model="row.accountName" @input="markAccountNameManual(row)" /></template>
+          <template #default="{ row }"><el-input v-model="row.accountName" :disabled="readonlyBatch" @input="markAccountNameManual(row)" /></template>
         </el-table-column>
         <el-table-column width="220">
           <template #header><span class="required-label">行名</span></template>
-          <template #default="{ row }"><el-input v-model="row.bankName" /></template>
+          <template #default="{ row }"><el-input v-model="row.bankName" :disabled="readonlyBatch" /></template>
         </el-table-column>
         <el-table-column label="银行类型" width="150">
           <template #default="{ row }">
-            <el-select v-model="row.bankType" clearable style="width: 132px">
+            <el-select v-model="row.bankType" :disabled="readonlyBatch" clearable style="width: 132px">
               <el-option v-for="option in bankTypeOptions" :key="option" :label="option" :value="option" />
             </el-select>
           </template>
         </el-table-column>
         <el-table-column width="130" align="right">
           <template #header><span class="required-label">金额</span></template>
-          <template #default="{ row }"><el-input-number v-model="row.amount" :min="0" :precision="2" controls-position="right" style="width: 112px" /></template>
+          <template #default="{ row }"><el-input-number v-model="row.amount" :disabled="readonlyBatch" :min="0" :precision="2" controls-position="right" style="width: 112px" /></template>
         </el-table-column>
-        <el-table-column label="摘要" width="120"><template #default="{ row }"><el-select v-model="row.summary"><el-option label="工资" value="工资" /><el-option label="奖金" value="奖金" /><el-option label="报销" value="报销" /><el-option label="劳务费" value="劳务费" /></el-select></template></el-table-column>
-        <el-table-column label="备注" width="180"><template #default="{ row }"><el-input v-model="row.remark" /></template></el-table-column>
-        <el-table-column label="联行行号" width="150"><template #default="{ row }"><el-input v-model="row.cnapsNo" /></template></el-table-column>
+        <el-table-column label="摘要" width="120"><template #default="{ row }"><el-select v-model="row.summary" :disabled="readonlyBatch"><el-option label="工资" value="工资" /><el-option label="奖金" value="奖金" /><el-option label="报销" value="报销" /><el-option label="劳务费" value="劳务费" /></el-select></template></el-table-column>
+        <el-table-column label="备注" width="180"><template #default="{ row }"><el-input v-model="row.remark" :disabled="readonlyBatch" /></template></el-table-column>
+        <el-table-column label="联行行号" width="150"><template #default="{ row }"><el-input v-model="row.cnapsNo" :disabled="readonlyBatch" /></template></el-table-column>
         <el-table-column width="190">
           <template #header>身份证号<span class="field-hint">人员必填</span></template>
-          <template #default="{ row }"><el-input v-model="row.idCardNo" /></template>
+          <template #default="{ row }"><el-input v-model="row.idCardNo" :disabled="readonlyBatch" /></template>
         </el-table-column>
-        <el-table-column label="手机号" width="130"><template #default="{ row }"><el-input v-model="row.phone" /></template></el-table-column>
-        <el-table-column label="操作" width="80" fixed="right"><template #default="{ $index }"><el-button link type="danger" @click="removeRow($index)">删除</el-button></template></el-table-column>
+        <el-table-column label="手机号" width="130"><template #default="{ row }"><el-input v-model="row.phone" :disabled="readonlyBatch" /></template></el-table-column>
+        <el-table-column v-if="!readonlyBatch" label="操作" width="80" fixed="right"><template #default="{ $index }"><el-button link type="danger" @click="removeRow($index)">删除</el-button></template></el-table-column>
       </el-table>
     </div>
 
@@ -318,6 +330,9 @@ onMounted(load)
         </el-form-item>
         <el-form-item label="银行模板" required>
           <el-segmented v-model="exportForm.templateType" :options="[{ label: '建设银行', value: 'CCB' }, { label: '中国银行', value: 'BOC' }]" />
+        </el-form-item>
+        <el-form-item label="存放路径">
+          <el-input v-model="exportForm.savePath" clearable placeholder="留空使用系统默认导出目录" />
         </el-form-item>
       </el-form>
       <template #footer>

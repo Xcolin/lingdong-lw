@@ -42,6 +42,7 @@ public class ExportController {
                 request.batchId(),
                 request.payingUnitId(),
                 request.templateType(),
+                request.savePath(),
                 currentUserProvider.get()
         )));
     }

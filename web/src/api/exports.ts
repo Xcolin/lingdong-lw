@@ -1,6 +1,6 @@
 import { http } from './http'
 
-export function createExport(data: { batchId: number; payingUnitId: number; templateType: 'CCB' | 'BOC' }) {
+export function createExport(data: { batchId: number; payingUnitId: number; templateType: 'CCB' | 'BOC'; savePath?: string }) {
   return http.post('/api/exports', data)
 }
 
